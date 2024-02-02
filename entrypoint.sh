@@ -7,8 +7,6 @@ cd /home/eval
 # Mark as CS testcontainer
 sh -c echo CS_testcontainer starting
 
-chmod +x ./bin/Reverse_Shell_Trojan.sh
-
 exec /shell2http -show-errors -include-stderr \
     /ps "ps aux" \
     /rootkit ./bin/Defense_Evasion_via_Rootkit.sh \
