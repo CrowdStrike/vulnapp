@@ -1,7 +1,5 @@
 FROM golang:alpine as builder
 
-LABEL org.opencontainers.image.source="https://github.com/CrowdStrike/vulnapp"
-
 RUN apk add --no-cache git
 
 ADD . $GOPATH/src/github.com/crowdstrike/shell2http
@@ -15,6 +13,8 @@ RUN go build -v -trimpath -ldflags="-w -s -X 'main.version=$(git describe --abbr
 
 # final image
 FROM quay.io/crowdstrike/detection-container
+
+LABEL org.opencontainers.image.source="https://github.com/CrowdStrike/vulnapp"
 
 COPY entrypoint.sh /
 COPY images /images
