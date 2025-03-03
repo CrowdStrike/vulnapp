@@ -1,5 +1,7 @@
 FROM golang:alpine as builder
 
+LABEL org.opencontainers.image.source="https://github.com/CrowdStrike/vulnapp"
+
 RUN apk add --no-cache git
 
 ADD . $GOPATH/src/github.com/crowdstrike/shell2http
