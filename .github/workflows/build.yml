@@ -1,61 +1,70 @@
-name: Multi-arch build
+name: Docker Build Test
 
 on:
   push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+  pull_request:
+    branches:
+      - main
     paths-ignore:
       - '**.md'
 
 permissions:
   contents: read
 
-env:
-  IMAGE_TAG: latest
-  IMAGE_REGISTRY: quay.io
-  IMAGE_REPOSITORY: crowdstrike/vulnapp
-
 jobs:
-  build-multiarch-image:
-    name: Build multi-architecture image
+  docker-build-test:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 60
     steps:
-      - name: Install qemu dependency
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-user-static
-
-      - name: Checkout project
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392  # v3.6.0
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435  # v3.11.1
-        with:
-          platforms: linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1  # v3.5.0
-        with:
-          registry: ${{ env.IMAGE_REGISTRY }}
-          username: ${{ secrets.REGISTRY_LOGIN }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
-
-      - name: Setup Cross Compile Dockerfile
-        run: sed -e '1 s/\(^FROM\)/FROM --platform=$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
-
-      - name: Build and push
-        id: build_image_multiarch
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83  # v6.18.0
+      - name: Build multi-platform Docker image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           context: .
-          file: ./Dockerfile.cross
-          platforms: linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
-          push: true
+          platforms: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           tags: |
-            ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_REPOSITORY }}:${{ env.IMAGE_TAG }}
+            vulnapp:test
+            vulnapp:pr-${{ github.event.pull_request.number }}
 
-      - name: Check manifest
+      - name: Test Docker image (amd64)
         run: |
-          docker buildx imagetools inspect ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_REPOSITORY }}:${{ env.IMAGE_TAG }}
+          docker buildx build \
+            --platform linux/amd64 \
+            --load \
+            --tag vulnapp:test-local \
+            .
+
+          docker run -d --name vulnapp-test -p 8080:8080 vulnapp:test-local
+
+          echo "Waiting for server to start..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8080/ > /dev/null 2>&1; then
+              echo "Server is up"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "Server failed to start within 30s"
+              docker logs vulnapp-test
+              docker rm -f vulnapp-test
+              exit 1
+            fi
+            sleep 1
+          done
+
+          echo "Verifying welcome page content..."
+          curl -sf http://localhost:8080/ | grep -q "Welcome to vulnerable.example.com"
+          echo "Smoke test passed!"
+
+          docker rm -f vulnapp-test
