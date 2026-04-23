@@ -46,80 +46,6 @@ const (
 	maxMemoryForUploadFile = 65536
 )
 
-// indexTmpl - template for index page
-const indexTmpl = `<!DOCTYPE html>
-<!-- Served by shell2http/%s -->
-<html>
-<head>
-    <title>❯ CrowdStrike's VulnApp</title>
-	<link rel="icon" href="/images/logo.png">
-    <style>
-    body {
-        font-family: sans-serif;
-		background-color: #17161a;
-    }
-    li {
-        list-style-type: none;
-    }
-    li:before {
-        content: "❯";
-        padding-right: 5px;
-    }
-	h1, h2, h3  {
-		color: #fff;
-		opacity: 0.87;
-	}
-	p {
-		color: #fff;
-		opacity: 0.75;
-	}
-	.links, a {
-		color: #fff;
-	};
-	.hero {
-		margin: auto;
-		width: 100%%;
-		flex-shrink: 1;
-	}
-	.welcome {
-		margin: auto;
-		max-width: 600px;
-	}
-	.container {
-		display: flex;
-		flex-direction: row;
-		flex-grow: 1;
-		flex-wrap: wrap;
-		background-color: #000;
-    </style>
-</head>
-<header>
-    <div class="header" style="display: flex; flex-direction: row; align-items: center;">
-        <img class="logo" style="height: 75%%; padding-top: 8px" src="images/logo_crowdstrike.png">
-	    <span class="separator" style="color: #fff; padding: 10px;"> | </span>
-	    <h2>VulnApp</h2>
-    </div>
-</header>
-<body>
-    <div class="container">
-	    <div class="welcome">
-	        <h1>Welcome to vulnerable.example.com</h1>
-
-            <p>This web application runs on a Kubernetes cluster utilizing CrowdStrke's Falcon sensor running via DaemonSet or as a Sidecar.</p>
-            <p>The web application will allow you to execute various exploitation techniques as if it was an attacker exploiting the application. The Falcon sensor will recognize this malicious behavior and report it back to the Falcon Console.</p>
-
-            <p>You can view output of <a class="links" href="/ps">ps command</a> to see view process running within the same pod as this application.</p>
-	    </div>
-        <img class="hero" src="images/hero-homepage.png">
-    </div>
-	<h3>Detections</h3>
-	<ul>
-		%s
-	</ul>
-</body>
-</html>
-`
-
 // command - one command
 type command struct {
 	path       string
@@ -225,7 +151,7 @@ func getShellHandler(appConfig Config, shell string, params []string, cacheTTL r
 			rw.WriteHeader(http.StatusInternalServerError)
 		}
 
-		responseWrite(rw, outText)
+		responseWrite(rw, stripANSI(outText))
 	}
 }
 
@@ -388,7 +314,7 @@ func setupHandlers(cmdHandlers []command, appConfig Config, cacheTTL raphanus.DB
 		if row.httpMethod != "" {
 			methodDesc = row.httpMethod + ": "
 		}
-		indexLiHTML += fmt.Sprintf(`<li><a href=".%s">%s%s</a> <span style="color: #888">- %s<span></li>`, path, methodDesc, path, describeCmd(cmd))
+		indexLiHTML += fmt.Sprintf(`<li><a href=".%s">%s%s</a> <span>- %s<span></li>`, path, methodDesc, path, describeCmd(cmd))
 		cmdsForLog[path] = append(cmdsForLog[path], cmd)
 
 		handler := mwMethodOnly(getShellHandler(appConfig, shell, params, cacheTTL), row.httpMethod)
@@ -426,7 +352,11 @@ func setupHandlers(cmdHandlers []command, appConfig Config, cacheTTL raphanus.DB
 
 	// --------------
 	if !appConfig.noIndex && !existsRootPath {
-		indexHTML := fmt.Sprintf(indexTmpl, version, indexLiHTML)
+		animAttr := ""
+		if appConfig.noAnimations {
+			animAttr = ` data-animations="off"`
+		}
+		indexHTML := fmt.Sprintf(indexTmpl, version, animAttr, indexLiHTML)
 		resultHandlers = append(resultHandlers, command{
 			path: "/",
 			cmd:  "index page",
@@ -443,6 +373,13 @@ func setupHandlers(cmdHandlers []command, appConfig Config, cacheTTL raphanus.DB
 	}
 
 	return resultHandlers, nil
+}
+
+var reANSI = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+// stripANSI removes ANSI escape sequences from s.
+func stripANSI(s string) string {
+	return reANSI.ReplaceAllString(s, "")
 }
 
 // responseWrite - write text to response
@@ -723,7 +660,11 @@ func main() {
 		http.HandleFunc(handler.path, handlerFunc)
 		log.Printf("register: %s (%s)\n", handler.path, handler.cmd)
 	}
-	fs := http.FileServer(http.Dir("/images"))
+	imagesDir := "/images"
+	if _, err := os.Stat(imagesDir); os.IsNotExist(err) {
+		imagesDir = "images"
+	}
+	fs := http.FileServer(http.Dir(imagesDir))
 	http.Handle("/images/", http.StripPrefix("/images/", fs))
 
 	listener, err := net.Listen("tcp", net.JoinHostPort(appConfig.host, strconv.Itoa(appConfig.port)))
