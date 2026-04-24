@@ -69,6 +69,7 @@ type Config struct {
 	includeStderr bool           // also returns output written to stderr (default is stdout only)
 	intServerErr  bool           // return 500 error if shell status code != 0
 	formCheckRe   *regexp.Regexp // regexp for check form fields
+	commandsFile  string         // JSON file with path/command/description entries
 }
 
 // getConfig - parse arguments
@@ -108,6 +109,7 @@ func getConfig() (*Config, error) {
 	flag.StringVar(&cfg.key, "key", "", "SSL private key `/path/...`")
 	flag.Var(&cfg.auth, "basic-auth", "setup HTTP Basic Authentication (\"user_name:password\"), can be used several times")
 	flag.IntVar(&cfg.timeout, "timeout", 0, "set `timeout` for execute shell command (in seconds)")
+	flag.StringVar(&cfg.commandsFile, "commands-file", "", "JSON `file` with path/command/description entries")
 
 	formCheck := flag.String("form-check", "", "regexp for check form fields (pass only vars that match the regexp)")
 

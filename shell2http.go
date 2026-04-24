@@ -2,11 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"html"
 	"io"
-	"io/ioutil"
 	"log"
 	"mime/multipart"
 	"net"
@@ -311,18 +311,49 @@ func execShellCommand(appConfig Config, shell string, params []string, req *http
 	return shellOut, exitCode, err
 }
 
-var cmdDescriptions = map[string]string{
-	"./bin/Defense_Evasion_via_Rootkit.sh":                             "This script will change the group owner of /etc/ld.so.preload to 0, indicative of a Jynx Rootkit.",
-	"./bin/Defense_Evasion_via_Masquerading.sh":                        "Creates a copy of /usr/bin/whoami to whoami.rtf and executes it, causing a contradicting file extension.",
-	"./bin/Exfiltration_via_Exfiltration_Over_Alternative_Protocol.sh": "Attempts to exfiltrate data using DNS dig requests that contain system data in the hostname.",
-	"./bin/Command_Control_via_Remote_Access.sh":                       "Attempts to connect to a remote IP address and will exit at fork. Falcon Prevent will kill the attempt.",
-	"./bin/Command_Control_via_Remote_Access-obfuscated.sh":            "Attempts to connect to a remote IP address and will exit at fork. Falcon Prevent will kill the attempt. (obfuscated version)",
-	"./bin/Credential_Access_via_Credential_Dumping.sh":                "Runs mimipenguin and tries to dump passwords from inside the container environment.",
-	"./bin/Collection_via_Automated_Collection.sh":                     "Attempts to dump credentials from /etc/passwd to /tmp/passwords.",
-	"./bin/Execution_via_Command-Line_Interface.sh":                    "Emulate malicious activity related to suspicious CLI commands. Runs the command sh -c whoami '[S];pwd;echo [E]'.",
-	"./bin/Malware_Linux_Trojan_Local.sh":                              "Attempts to execute malware pre-loaded into the container. A Falcon Prevent policy will kill the process, if Falcon Prevent is enabled.",
-	"./bin/Malware_Linux_Trojan_Remote.sh":                             "Downloads malware from a remote target and attempts to execute it. A Falcon Prevent policy will kill the process, if Falcon Prevent is enabled.",
-	"./bin/ContainerDrift_Via_File_Creation_and_Execution.sh":          "Container Drift via file creation script. Creating a file and then executing it.",
+var cmdDescriptions = map[string]string{}
+
+// commandEntry represents a single path/command pair from a commands file.
+type commandEntry struct {
+	Path        string `json:"path"`
+	Command     string `json:"command"`
+	Description string `json:"description,omitempty"`
+}
+
+// loadCommandsFile reads a JSON file of command entries and returns commands
+// for handler registration. Entries with descriptions populate cmdDescriptions.
+func loadCommandsFile(path string) ([]command, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read commands file %s: %w", path, err)
+	}
+
+	var entries []commandEntry
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return nil, fmt.Errorf("parse commands file %s: %w", path, err)
+	}
+
+	seen := map[string]bool{}
+	cmds := make([]command, 0, len(entries))
+	for _, e := range entries {
+		if e.Path == "" {
+			return nil, fmt.Errorf("commands file %s: entry missing path", path)
+		}
+		if e.Command == "" {
+			return nil, fmt.Errorf("commands file %s: entry for %q missing command", path, e.Path)
+		}
+		if seen[e.Path] {
+			return nil, fmt.Errorf("commands file %s: duplicate path %q", path, e.Path)
+		}
+		seen[e.Path] = true
+
+		if e.Description != "" {
+			cmdDescriptions[e.Command] = e.Description
+		}
+		cmds = append(cmds, command{path: e.Path, cmd: e.Command})
+	}
+
+	return cmds, nil
 }
 
 func describeCmd(cmd string) string {
@@ -425,7 +456,7 @@ func responseWrite(rw io.Writer, text string) {
 func setCGIEnv(cmd *exec.Cmd, req *http.Request, appConfig Config) {
 	// set HTTP_* variables
 	for headerName, headerValue := range req.Header {
-		envName := strings.ToUpper(strings.Replace(headerName, "-", "_", -1))
+		envName := strings.ToUpper(strings.ReplaceAll(headerName, "-", "_"))
 		if envName == "PROXY" {
 			continue
 		}
@@ -545,11 +576,11 @@ func getForm(cmd *exec.Cmd, req *http.Request, checkFormRe *regexp.Regexp) (func
 					uplFile, err = value[0].Open()
 					return err
 				}, func() error {
-					tempDir, err = ioutil.TempDir("", "shell2http_")
+					tempDir, err = os.MkdirTemp("", "shell2http_")
 					return err
 				}, func() error {
 					prefix := safeFileNameRe.ReplaceAllString(reqFileName, "")
-					outFile, err = ioutil.TempFile(tempDir, prefix+"_")
+					outFile, err = os.CreateTemp(tempDir, prefix+"_")
 					return err
 				}, func() error {
 					_, err = io.Copy(outFile, uplFile)
@@ -650,9 +681,24 @@ func main() {
 		log.Fatal(err)
 	}
 
-	cmdHandlers, err := parsePathAndCommands(flag.Args())
-	if err != nil {
-		log.Fatalf("failed to parse arguments: %s", err)
+	var cmdHandlers []command
+	if appConfig.commandsFile != "" {
+		cmdHandlers, err = loadCommandsFile(appConfig.commandsFile)
+		if err != nil {
+			log.Fatalf("failed to load commands file: %s", err)
+		}
+	}
+
+	if args := flag.Args(); len(args) > 0 {
+		argHandlers, err := parsePathAndCommands(args)
+		if err != nil {
+			log.Fatalf("failed to parse arguments: %s", err)
+		}
+		cmdHandlers = append(cmdHandlers, argHandlers...)
+	}
+
+	if len(cmdHandlers) == 0 {
+		log.Fatal("requires at least one path/command pair via -commands-file or arguments")
 	}
 
 	var cacheTTL raphanus.DB
