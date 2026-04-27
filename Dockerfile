@@ -14,7 +14,12 @@ RUN go build -v -trimpath -ldflags="-w -s -X 'main.version=$(git describe --abbr
 # final image
 FROM quay.io/crowdstrike/detection-container
 
-LABEL org.opencontainers.image.source="https://github.com/CrowdStrike/vulnapp"
+LABEL org.opencontainers.image.source="https://github.com/CrowdStrike/vulnapp" \
+      license="MIT" \
+      vendor="CrowdStrike" \
+      url="https://github.com/CrowdStrike/vulnapp" \
+      vcs-ref="" \
+      release=""
 
 COPY entrypoint.sh /
 COPY images /images
