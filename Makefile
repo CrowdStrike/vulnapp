@@ -10,6 +10,9 @@ run:
 build:
 	go build .
 
+generate-detections:
+	go run ./scripts/gendetections $(SCRIPTS_DIR)
+
 update-from-github:
 	go install github.com/msoap/$(APP_NAME)@latest
 

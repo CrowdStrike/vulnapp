@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -136,7 +135,7 @@ func httpRequest(method, url, postData string) ([]byte, error) {
 		return nil, err
 	}
 
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -312,6 +311,95 @@ func Test_errChainAll(t *testing.T) {
 	err = errChainAll(func() error { return fmt.Errorf("error") }, func() error { var1 = true; return nil })
 	if err == nil || !var1 {
 		t.Errorf("6. errChainAll() failed")
+	}
+}
+
+func Test_loadCommandsFile(t *testing.T) {
+	tests := []struct {
+		name            string
+		content         string
+		wantCmds        []command
+		wantDescCount   int
+		wantErr         bool
+	}{
+		{
+			name:    "valid with descriptions",
+			content: `[{"path":"/a","command":"cmd_a","description":"desc a"},{"path":"/b","command":"cmd_b"}]`,
+			wantCmds: []command{
+				{path: "/a", cmd: "cmd_a"},
+				{path: "/b", cmd: "cmd_b"},
+			},
+			wantDescCount: 1,
+			wantErr:       false,
+		},
+		{
+			name:    "missing path",
+			content: `[{"command":"cmd_a"}]`,
+			wantErr: true,
+		},
+		{
+			name:    "missing command",
+			content: `[{"path":"/a"}]`,
+			wantErr: true,
+		},
+		{
+			name:    "duplicate paths",
+			content: `[{"path":"/a","command":"cmd_a"},{"path":"/a","command":"cmd_b"}]`,
+			wantErr: true,
+		},
+		{
+			name:    "invalid json",
+			content: `not json`,
+			wantErr: true,
+		},
+		{
+			name:          "empty array",
+			content:       `[]`,
+			wantCmds:      []command{},
+			wantDescCount: 0,
+			wantErr:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// reset global state
+			cmdDescriptions = map[string]string{}
+
+			f, err := os.CreateTemp("", "commands-*.json")
+			if err != nil {
+				t.Fatalf("create temp file: %s", err)
+			}
+			t.Cleanup(func() { _ = os.Remove(f.Name()) })
+
+			if _, err := f.WriteString(tt.content); err != nil {
+				t.Fatalf("write temp file: %s", err)
+			}
+			_ = f.Close()
+
+			got, err := loadCommandsFile(f.Name())
+			if (err != nil) != tt.wantErr {
+				t.Errorf("loadCommandsFile() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr {
+				return
+			}
+			if !reflect.DeepEqual(got, tt.wantCmds) {
+				t.Errorf("loadCommandsFile() = %v, want %v", got, tt.wantCmds)
+			}
+			if len(cmdDescriptions) != tt.wantDescCount {
+				t.Errorf("cmdDescriptions has %d entries, want %d", len(cmdDescriptions), tt.wantDescCount)
+			}
+		})
+	}
+}
+
+func Test_loadCommandsFile_notFound(t *testing.T) {
+	cmdDescriptions = map[string]string{}
+	_, err := loadCommandsFile("/nonexistent/path.json")
+	if err == nil {
+		t.Error("loadCommandsFile() expected error for missing file")
 	}
 }
 

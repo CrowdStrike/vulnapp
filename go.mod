@@ -1,6 +1,6 @@
 module github.com/msoap/shell2http
 
-go 1.18
+go 1.26
 
 require (
 	github.com/mattn/go-shellwords v1.0.12
