@@ -68,6 +68,7 @@ type Config struct {
 	showErrors    bool           // returns the standard output even if the command exits with a non-zero exit code
 	includeStderr bool           // also returns output written to stderr (default is stdout only)
 	intServerErr  bool           // return 500 error if shell status code != 0
+	noAnimations  bool           // disable UI animations
 	formCheckRe   *regexp.Regexp // regexp for check form fields
 	commandsFile  string         // JSON file with path/command/description entries
 }
@@ -110,6 +111,7 @@ func getConfig() (*Config, error) {
 	flag.Var(&cfg.auth, "basic-auth", "setup HTTP Basic Authentication (\"user_name:password\"), can be used several times")
 	flag.IntVar(&cfg.timeout, "timeout", 0, "set `timeout` for execute shell command (in seconds)")
 	flag.StringVar(&cfg.commandsFile, "commands-file", "", "JSON `file` with path/command/description entries")
+	flag.BoolVar(&cfg.noAnimations, "no-animations", false, "disable UI animations on the index page")
 
 	formCheck := flag.String("form-check", "", "regexp for check form fields (pass only vars that match the regexp)")
 
