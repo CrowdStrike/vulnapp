@@ -22,7 +22,12 @@ RUN /gendetections /home/eval/bin > /detections.json
 # final image
 FROM quay.io/crowdstrike/detection-container
 
-LABEL org.opencontainers.image.source="https://github.com/CrowdStrike/vulnapp"
+LABEL org.opencontainers.image.source="https://github.com/CrowdStrike/vulnapp" \
+      license="MIT" \
+      vendor="CrowdStrike" \
+      url="https://github.com/CrowdStrike/vulnapp" \
+      vcs-ref="" \
+      release=""
 
 COPY --from=detector /detections.json /detections.json
 COPY --from=builder /go/bin/shell2http /shell2http
