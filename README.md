@@ -3,6 +3,10 @@
 
 ## Usage - Generic Kubernetes
 
+> [!IMPORTANT]
+> This project intentionally incorporates security vulnerabilities and simulated attack scenarios to demonstrate CrowdStrike Falcon platform capabilities.
+> These behaviors are expected by design, and the project is intended solely for demonstration and testing in controlled environments, not for production use.
+
 ```
 kubectl apply -f  https://raw.githubusercontent.com/crowdstrike/vulnapp/main/vulnerable.example.yaml
 ```
