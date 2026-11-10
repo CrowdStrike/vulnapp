@@ -283,12 +283,10 @@ func loadCommandsFile(path string) ([]command, error) {
 }
 
 func describeCmd(cmd string) string {
-	desc, ok := cmdDescriptions[cmd]
-	if ok {
-		return desc
-	} else {
-		return html.EscapeString(cmd)
+	if desc, ok := cmdDescriptions[cmd]; ok {
+		return html.EscapeString(desc)
 	}
+	return html.EscapeString(cmd)
 }
 
 // setupHandlers - setup http handlers
@@ -314,7 +312,8 @@ func setupHandlers(cmdHandlers []command, appConfig Config, cacheTTL raphanus.DB
 		if row.httpMethod != "" {
 			methodDesc = row.httpMethod + ": "
 		}
-		indexLiHTML += fmt.Sprintf(`<li><a href=".%s">%s%s</a> <span>- %s<span></li>`, path, methodDesc, path, describeCmd(cmd))
+		escapedPath := html.EscapeString(path)
+		indexLiHTML += fmt.Sprintf(`<li><a href=".%s">%s%s</a> <span>- %s</span></li>`, escapedPath, html.EscapeString(methodDesc), escapedPath, describeCmd(cmd))
 		cmdsForLog[path] = append(cmdsForLog[path], cmd)
 
 		handler := mwMethodOnly(getShellHandler(appConfig, shell, params, cacheTTL), row.httpMethod)

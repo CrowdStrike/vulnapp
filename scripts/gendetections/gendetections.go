@@ -15,6 +15,10 @@ type commandEntry struct {
 	Description string `json:"description,omitempty"`
 }
 
+// parseScriptHeaders reads the leading comment block of a detection script and
+// returns its Shortname and Description headers. A Description may wrap onto
+// following comment lines that are indented past the usual "# " (two or more
+// spaces, or a tab, after the "#"); those lines are joined with single spaces.
 func parseScriptHeaders(path string) (shortname, description string, err error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -23,21 +27,41 @@ func parseScriptHeaders(path string) (shortname, description string, err error) 
 	defer func() { _ = f.Close() }()
 
 	scanner := bufio.NewScanner(f)
+	inDescription := false
 	for scanner.Scan() {
 		line := scanner.Text()
 		if !strings.HasPrefix(line, "#") {
 			break
 		}
+		if inDescription {
+			if text, ok := continuationText(line); ok {
+				description += " " + text
+				continue
+			}
+			inDescription = false
+		}
 		if v, ok := strings.CutPrefix(line, "# Shortname:"); ok {
 			shortname = strings.TrimSpace(v)
 		} else if v, ok := strings.CutPrefix(line, "# Description:"); ok {
 			description = strings.TrimSpace(v)
+			inDescription = true
 		}
 	}
 	if err := scanner.Err(); err != nil {
 		return "", "", fmt.Errorf("read %s: %w", path, err)
 	}
 	return shortname, description, nil
+}
+
+// continuationText reports whether a comment line continues the previous
+// header and, if so, returns its trimmed text.
+func continuationText(line string) (string, bool) {
+	rest := strings.TrimPrefix(line, "#")
+	if !strings.HasPrefix(rest, "  ") && !strings.HasPrefix(rest, "\t") {
+		return "", false
+	}
+	text := strings.TrimSpace(rest)
+	return text, text != ""
 }
 
 func scanDirectory(dir string) ([]commandEntry, error) {

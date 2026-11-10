@@ -53,6 +53,34 @@ func Test_parseScriptHeaders(t *testing.T) {
 			wantShortname:   "before",
 			wantDescription: "",
 		},
+		{
+			name:            "description continues on indented line",
+			content:         "#!/bin/sh\n# Shortname: rs\n# Description: Connects to a remote IP and will exit at\n#   fork. Falcon Prevent will kill it.\n\necho hi\n",
+			wantShortname:   "rs",
+			wantDescription: "Connects to a remote IP and will exit at fork. Falcon Prevent will kill it.",
+		},
+		{
+			name:            "description continues on multiple indented lines",
+			content:         "#!/bin/sh\n# Description: one\n#   two\n#\tthree\necho hi\n",
+			wantDescription: "one two three",
+		},
+		{
+			name:            "continuation stops at blank comment and ignores later prose",
+			content:         "#!/bin/sh\n# Shortname: ransomware\n# Severity: High\n# Description: Simulates LockBit file encryption by renaming files with the\n#   .lockbit extension\n#\n# Impact via Data Encrypted for Impact\n#   indented prose that is not part of the header\n#\necho hi\n",
+			wantShortname:   "ransomware",
+			wantDescription: "Simulates LockBit file encryption by renaming files with the .lockbit extension",
+		},
+		{
+			name:            "continuation stops at next header",
+			content:         "#!/bin/sh\n# Description: first line\n# Shortname: after\n#   not a description continuation\necho hi\n",
+			wantShortname:   "after",
+			wantDescription: "first line",
+		},
+		{
+			name:            "single-space comment after description is not a continuation",
+			content:         "#!/bin/sh\n# Description: Complete sentence.\n# Some unrelated comment.\necho hi\n",
+			wantDescription: "Complete sentence.",
+		},
 	}
 
 	for _, tt := range tests {
